@@ -1,4 +1,4 @@
-# Robot Commander
+# Asteroid
 
 ![Awesome logo (not mine)](http://orig01.deviantart.net/dcc2/f/2011/115/c/e/asteroid_text_by_xdrac-d3eu89g.png)
 
