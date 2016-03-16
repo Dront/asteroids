@@ -1,5 +1,6 @@
 import logging
 import math
+from random import randint
 import pyglet
 from pyglet.window import key
 from cocos.director import director
@@ -8,6 +9,8 @@ from cocos.scene import Scene
 from cocos.layer import *
 from cocos.sprite import Sprite
 from cocos.actions import *
+import cocos.euclid as eu
+import cocos.collision_model as cm
 
 WIN_W = 800
 WIN_H = 600
@@ -149,12 +152,22 @@ class ShipMove(WrappedMove):
 class Ship(Sprite):
     def __init__(self):
         center = (WIN_W / 2., WIN_H / 2.)
-        super(Ship, self).__init__('spaceship.png', position=center, scale=0.2)
+        super(Ship, self).__init__('spaceship.png', position=center, scale=0.6)
         self.aim = center
+        self.radius = min(self.width, self.height) // 2
+        # self.cshape = cm.CircleShape(eu.Vector2(self.position), radius)
+
 
 class Asteroid(Sprite):
     def __init__(self, x, y):
-        Sprite.__init__(self, 'asteroid.png', position=(x, y), scale=0.7)
+        name = 'asteroid_' + str(randint(1, 4)) + '.png'
+        Sprite.__init__(self, name, position=(x, y), scale=0.7)
+        self.radius = min(self.width, self.height) // 2
+        # self.cshape = cm.CircleShape(eu.Vector2(self.position), radius)
+
+    def update_cshape(self):
+        pass
+        # self.cshape.center = eu.Vector2(self.position)
 
 
 class GameLayer(Layer):
@@ -166,26 +179,49 @@ class GameLayer(Layer):
         self.player = Ship()
         self.player.do(ShipMove())
         self.add(self.player)
+        # self.asteroids = []
+        # for i in range(3):
+        #  = Asteroid(0, 0)
         self.asteroid = Asteroid(0, 0)
-        self.asteroid.velocity = (50, 50)
+        self.asteroid.velocity = (70, 70)
         asteroid_action = WrappedMove(WIN_W, WIN_H) | Repeat(RotateBy(90, 1))
         self.asteroid.do(asteroid_action)
         self.add(self.asteroid)
+        # self.cm = cm.CollisionManagerGrid(0, WIN_W, 0, WIN_H, 100, 100)
 
     def on_mouse_motion(self, mx, my, dx, dy):
         self.player.aim = (mx, my)
 
-    def shoot(self, dt, who, point):
-        logging.info("{} shoot aiming to {}".format(who, point))
+    def shoot(self, dt):
+        logging.info("Bang! {}".format(self.player.aim))
 
     def on_mouse_press(self, mx, my, button, modifiers):
-        pyglet.clock.schedule_interval(self.shoot, 0.5, "Player", (mx, my))
+        pyglet.clock.schedule_interval(self.shoot, 0.5)
 
     def on_mouse_release(self, x, y, button, modifiers):
         pyglet.clock.unschedule(self.shoot)
 
     def on_mouse_drag(self, mx, my, dx, dy, buttons, modifiers):
         self.player.aim = (mx, my)
+
+    def draw(self):
+        super(Layer, self).draw()
+        # self.player.update_cshape()
+        # self.asteroid.update_cshape()
+        px, py = self.player.position
+        pr = self.player.radius
+        ax, ay = self.asteroid.position
+        ar = self.asteroid.radius
+        dist = ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+        if dist - pr - ar <= 0:
+            logging.info("Collision!")
+        # d = abs(circle.center - other.center) - circle.r - other.r
+        # if d < 0.0:
+        #     d = 0.0
+        # return d
+        # self.cm.clear()
+        # self.cm.add(self.player)
+        # self.cm.add(self.asteroid)
 
 
 def get_new_game():
@@ -195,16 +231,6 @@ def get_new_game():
     scene.add(bg, z=0)
     scene.add(game, z=1)
     return scene
-
-
-def load_font(filename):
-    from pyglet.font.ttf import TruetypeInfo
-    p = TruetypeInfo(filename)
-    name = p.get_name("name")
-    p.close()
-    pyglet.font.add_file(filename)
-    got = pyglet.font.have_font(name)
-    logging.debug("Font {} loaded? - {}".format(name, got))
 
 
 if __name__ == '__main__':

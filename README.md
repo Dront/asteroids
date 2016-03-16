@@ -6,6 +6,8 @@ Simple point-and-click game.
 Trying out cocos2d and pyglet just for fun.
 
 ## TODO:
+- Implement collisions with collision_model
+- Needs moar asteroids!
 - Create bullets and stuff
 - Enemy class with basic parameters
 - Create GameOver scene and HUD
