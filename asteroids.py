@@ -1,11 +1,13 @@
 import logging
 import math
-from random import randint
+import random
 import pyglet
 from pyglet.window import key
 from cocos.director import director
 from cocos.menu import *
+from cocos.text import Label
 from cocos.scene import Scene
+from cocos.scenes.transitions import *
 from cocos.layer import *
 from cocos.sprite import Sprite
 from cocos.actions import *
@@ -20,7 +22,9 @@ FONT_FOLDER = 'fonts'
 SPEED_LIM = 200.
 SPEED_LIM_2 = SPEED_LIM * SPEED_LIM
 SPEED_STEP = 7.
-FONT_NAME = 'Minecraftia'
+
+FONT_NAME = 'ATComputer'
+FONT_COLOR = (200, 0, 0, 255)
 
 keys = key.KeyStateHandler()
 
@@ -44,12 +48,12 @@ class BaseMenu(Menu):
         super(BaseMenu, self).__init__(name)
         self.font_title['font_name'] = FONT_NAME
         self.font_title['font_size'] = 72
-        self.font_title['color'] = (200, 0, 0, 255)
+        self.font_title['color'] = FONT_COLOR
         self.font_item['font_name'] = FONT_NAME
-        self.font_item['color'] = (200, 0, 0, 255)
+        self.font_item['color'] = FONT_COLOR
         self.font_item['font_size'] = 32
         self.font_item_selected['font_name'] = FONT_NAME
-        self.font_item_selected['color'] = (200, 0, 0, 255)
+        self.font_item_selected['color'] = FONT_COLOR
         self.font_item_selected['font_size'] = 46
         self.menu_valign = CENTER
         self.menu_halign = CENTER
@@ -68,7 +72,7 @@ class MainMenu(BaseMenu):
 
     def start_game(self):
         logging.info('Starting Game!')
-        director.push(get_new_game())
+        director.push(FadeTransition(game_scene(), 0.8))
 
     def to_options(self):
         logging.info('To the options menu!')
@@ -160,7 +164,7 @@ class Ship(Sprite):
 
 class Asteroid(Sprite):
     def __init__(self, x, y):
-        name = 'asteroid_' + str(randint(1, 4)) + '.png'
+        name = 'asteroid_' + str(random.randint(1, 4)) + '.png'
         Sprite.__init__(self, name, position=(x, y), scale=0.7)
         self.radius = min(self.width, self.height) // 2
         # self.cshape = cm.CircleShape(eu.Vector2(self.position), radius)
@@ -170,23 +174,36 @@ class Asteroid(Sprite):
         # self.cshape.center = eu.Vector2(self.position)
 
 
+def get_default_asteroid():
+    x, y = random.randint(0, 1) * WIN_W, random.randint(0, 1) * WIN_H
+    asteroid = Asteroid(x, y)
+    vec_x, vec_y = random.random() * 2 - 1, random.random() * 2 - 1
+    speed = random.randint(50, SPEED_LIM // 1.5)
+    norm = (vec_x * vec_x + vec_y * vec_y) ** 0.5
+    asteroid.velocity = (speed * vec_x / norm, speed * vec_y / norm)
+
+    asteroid_action = WrappedMove(WIN_W, WIN_H) | Repeat(RotateBy(speed, 1))
+    asteroid.do(asteroid_action)
+    return asteroid
+
+
 class GameLayer(Layer):
 
     is_event_handler = True
 
     def __init__(self):
         super(GameLayer, self).__init__()
+        self.ended = False
         self.player = Ship()
         self.player.do(ShipMove())
         self.add(self.player)
-        # self.asteroids = []
-        # for i in range(3):
-        #  = Asteroid(0, 0)
-        self.asteroid = Asteroid(0, 0)
-        self.asteroid.velocity = (70, 70)
-        asteroid_action = WrappedMove(WIN_W, WIN_H) | Repeat(RotateBy(90, 1))
-        self.asteroid.do(asteroid_action)
-        self.add(self.asteroid)
+
+        self.asteroids = []
+        for i in range(5):
+            asteroid = get_default_asteroid()
+            logging.info('Created new asteroid! Vec: %s', asteroid.velocity)
+            self.asteroids.append(asteroid)
+            self.add(asteroid)
         # self.cm = cm.CollisionManagerGrid(0, WIN_W, 0, WIN_H, 100, 100)
 
     def on_mouse_motion(self, mx, my, dx, dy):
@@ -208,13 +225,19 @@ class GameLayer(Layer):
         super(Layer, self).draw()
         # self.player.update_cshape()
         # self.asteroid.update_cshape()
+        if self.ended:
+            return
+
         px, py = self.player.position
         pr = self.player.radius
-        ax, ay = self.asteroid.position
-        ar = self.asteroid.radius
-        dist = ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
-        if dist - pr - ar <= 0:
-            logging.info("Collision!")
+        for asteroid in self.asteroids:
+            ax, ay = asteroid.position
+            ar = asteroid.radius
+            dist = ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+            if dist - pr - ar <= 0:
+                logging.info("Collision! %s", random.randint(0, 100))
+                # director.replace(FadeTransition(game_over_scene(), 1.))
+                director.replace(FadeTRTransition(game_over_scene(), 2.))
         # d = abs(circle.center - other.center) - circle.r - other.r
         # if d < 0.0:
         #     d = 0.0
@@ -224,41 +247,94 @@ class GameLayer(Layer):
         # self.cm.add(self.asteroid)
 
 
-def get_new_game():
+class GameOverLayer(Layer):
+
+    is_event_handler = True
+
+    def __init__(self):
+        super(GameOverLayer, self).__init__()
+
+        center = WIN_W // 2, WIN_H // 2
+        label = Label(text="Game Over",
+                      font_name=FONT_NAME,
+                      font_size=72,
+                      color=FONT_COLOR,
+                      anchor_x="center",
+                      anchor_y="center",
+                      position=center)
+                      # position=(center[0], WIN_H + 100))
+        # label.do(MoveTo(center, 1))
+        self.add(label)
+
+        helper = Label(text="Press ant key to continue",
+                       font_name=FONT_NAME,
+                       font_size=30,
+                       color=FONT_COLOR,
+                       position=(center[0], center[1] - 200),
+                       anchor_x="center",
+                       anchor_y="center")
+        self.add(helper)
+
+    def next_scene(self):
+        logging.info("To main menu!")
+        director.pop()
+
+    def on_mouse_press(self, mx, my, button, modifiers):
+        self.next_scene()
+
+    def on_key_press(self, k, mod):
+        self.next_scene()
+
+
+def menu_scene():
     scene = Scene()
-    bg = BackgroundLayer('main_background.jpg')
-    game = GameLayer()
-    scene.add(bg, z=0)
-    scene.add(game, z=1)
+    scene.add(BackgroundLayer('menu_backgroud.jpg'), z=0)
+    scene.add(MultiplexLayer(
+        MainMenu(),
+        OptionsMenu()
+    ), z=1)
     return scene
 
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format='%(levelname)-5s: %(message)s')
+def game_over_scene():
+    scene = Scene()
+    scene.add(BackgroundLayer('main_background.jpg'), z=0)
+    asteroid_layer = Layer()
+    for i in range(5):
+        asteroid_layer.add(get_default_asteroid())
+        scene.add(asteroid_layer)
+    scene.add(GameOverLayer(), z=2)
+    return scene
 
-    director.init(caption="Asteroids", width=800, height=600, resizable=False, autoscale=True)
-    director.window.push_handlers(keys)
 
+def game_scene():
+    scene = Scene()
+    scene.add(BackgroundLayer('main_background.jpg'), z=0)
+    scene.add(GameLayer(), z=1)
+    return scene
+
+
+def init_resources():
     pyglet.resource.path = [IMG_FOLDER, FONT_FOLDER]
     pyglet.resource.reindex()
 
     image = pyglet.resource.texture('cursor.png')
     cursor = pyglet.window.ImageMouseCursor(image, 24, 24)
     director.window.set_mouse_cursor(cursor)
-    icon1 = pyglet.resource.texture('icon.png')
-    icon2 = pyglet.resource.texture('icon_128.png')
-    director.window.set_icon(icon1, icon2)
+    # icon1 = pyglet.resource.texture('icon.png')
+    # icon2 = pyglet.resource.texture('icon_128.png')
+    # director.window.set_icon(icon1, icon2)
 
-    pyglet.resource.add_font('Minecraftia.ttf')
-    got = pyglet.font.have_font('Minecraftia')
-    logging.debug("Have font? : {}".format(got))
+    # pyglet.resource.add_font('Minecraftia.ttf')
+    pyglet.resource.add_font('ATComputer.ttf')
 
-    menu_scene = Scene()
-    menu_scene.add(BackgroundLayer('menu_backgroud.jpg'), z=0)
-    menu_scene.add(MultiplexLayer(
-        MainMenu(),
-        OptionsMenu()
-    ), z=1)
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG, format='%(levelname)-5s: %(message)s')
+
+    director.init(caption="Asteroids", width=WIN_W, height=WIN_H, resizable=False, autoscale=False)
+    director.window.push_handlers(keys)
+
+    init_resources()
 
     # director.window.push_handlers(pyglet.window.event.WindowEventLogger())
-    director.run(menu_scene)
+    director.run(menu_scene())
